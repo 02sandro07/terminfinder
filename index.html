@@ -101,6 +101,13 @@ h2{
   background:var(--gold-bg);color:var(--ink);border:1px solid var(--gold);
   border-radius:10px;padding:10px 12px;margin:0 0 16px;font-size:.92rem;
 }
+.live{
+  display:inline-flex;align-items:center;gap:6px;color:var(--muted);
+  font-size:.82rem;margin:0 0 4px;
+}
+.live .dot-live{
+  width:8px;height:8px;border-radius:50%;background:var(--wa);display:inline-block;
+}
 .people{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
 .chip{
   display:inline-flex;align-items:center;gap:6px;
@@ -108,6 +115,7 @@ h2{
   padding:8px 14px;font-size:.95rem;font-weight:500;color:var(--ink);
   cursor:pointer;font-family:inherit;
 }
+.chip.me{border-color:var(--accent)}
 .chip small{color:var(--muted);font-weight:400}
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
@@ -190,14 +198,7 @@ summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:6px 2px}
 }
 .stepper b{min-width:120px;text-align:center;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .empty{color:var(--muted);font-size:.95rem}
-.bigcheck{
-  font-size:2.6rem;line-height:1;margin:6px 0 10px;
-}
-.share-title{
-  font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
-  font-weight:700;font-size:1.4rem;margin:0 0 8px;
-}
-.copied{color:var(--free-ink);font-size:.9rem;font-weight:600;text-align:center;min-height:1.4em;margin:6px 0 0}
+.sharefoot{margin-top:14px}
 @media (prefers-reduced-motion: no-preference){
   .day,.chip,.btn{transition:background .12s,border-color .12s,color .12s}
 }
@@ -208,15 +209,26 @@ summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:6px 2px}
 <script>
 (function(){
 "use strict";
+
+/* ===== Konfiguration ===== */
+var DB_URL="https://terminfinder-5b9bf-default-rtdb.europe-west1.firebasedatabase.app";
+var PLAN="plan-sept-2026";
 var YEAR=2026, MONTH=8, DAYS=30, MONTH_NAME="September";
+
 var WD=["So","Mo","Di","Mi","Do","Fr","Sa"];
+var state={nights:2,people:[]};   /* people: [{key,name,busy:[..]}] */
+var ui={view:"loading",editingName:null,draftName:"",busy:new Set(),
+        nameError:"",notice:"",saving:false,confirmDelete:false,live:false};
+var myName=null;
+try{ myName=localStorage.getItem("tf-me"); }catch(e){}
 
-/* ---------- state lives in the URL fragment ---------- */
-/* format:  #2|Anna;1-3,12|Ben;4-7   (first = nights, then name;busy-days) */
+function wd(d){ return WD[new Date(YEAR,MONTH,d).getDay()]; }
+function isWeekend(d){ var g=new Date(YEAR,MONTH,d).getDay(); return g===0||g===6; }
 
+/* ===== Kompakte Tages-Codierung ("1-3,12") ===== */
 function decodeDays(str){
   var out=[];
-  if(!str) return out;
+  if(!str||typeof str!=="string") return out;
   str.split(",").forEach(function(part){
     var m=part.split("-");
     var a=parseInt(m[0],10), b=m.length>1?parseInt(m[1],10):a;
@@ -236,55 +248,83 @@ function encodeDays(arr){
   }
   return parts.join(",");
 }
-function parseHash(){
-  var st={nights:2,people:[]};
-  var h=location.hash.replace(/^#/,"");
-  if(!h) return st;
-  var toks=h.split("|");
-  var n=parseInt(toks[0],10);
-  if(!isNaN(n)&&n>=1&&n<=7) st.nights=n;
-  for(var i=1;i<toks.length;i++){
-    var t=toks[i]; if(!t) continue;
-    var ix=t.indexOf(";");
-    var rawName=ix>=0?t.slice(0,ix):t;
-    var name;
-    try{ name=decodeURIComponent(rawName); }catch(e){ name=rawName; }
-    name=name.trim().slice(0,40);
-    if(!name) continue;
-    if(st.people.some(function(p){return p.name===name;})) continue;
-    st.people.push({name:name,busy:decodeDays(ix>=0?t.slice(ix+1):"")});
-    if(st.people.length>=20) break;
-  }
-  return st;
+
+/* ===== Datenbank (Firebase Realtime Database, REST) ===== */
+function keyFor(name){
+  /* Firebase-Pfade erlauben . $ # [ ] / nicht */
+  return encodeURIComponent(name).replace(/\./g,"%2E");
 }
-function buildHash(st){
-  var toks=[String(st.nights)];
-  st.people.forEach(function(p){
-    toks.push(encodeURIComponent(p.name)+";"+encodeDays(p.busy));
+function dbGet(path){
+  return fetch(DB_URL+"/"+PLAN+path+".json",{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("GET "+r.status);
+    return r.json();
   });
-  return "#"+toks.join("|");
 }
-
-var state=parseHash();
-var ui={view:"list",editingName:null,draftName:"",busy:new Set(),nameError:"",copied:""};
-
-function wd(d){ return WD[new Date(YEAR,MONTH,d).getDay()]; }
-function isWeekend(d){ var g=new Date(YEAR,MONTH,d).getDay(); return g===0||g===6; }
-
-function applyState(newState){
-  state=newState;
-  try{
-    history.replaceState(null,"",location.pathname+location.search+buildHash(state));
-  }catch(e){
-    try{ location.hash=buildHash(state).slice(1); }catch(e2){}
+function dbPut(path,val){
+  return fetch(DB_URL+"/"+PLAN+path+".json",{
+    method:"PUT",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(val)
+  }).then(function(r){ if(!r.ok) throw new Error("PUT "+r.status); return r.json(); });
+}
+function dbDelete(path){
+  return fetch(DB_URL+"/"+PLAN+path+".json",{method:"DELETE"}).then(function(r){
+    if(!r.ok) throw new Error("DELETE "+r.status);
+  });
+}
+function applyRaw(raw){
+  var st={nights:2,people:[]};
+  if(raw&&typeof raw==="object"){
+    var n=parseInt(raw.nights,10);
+    if(!isNaN(n)&&n>=1&&n<=7) st.nights=n;
+    if(raw.people&&typeof raw.people==="object"){
+      Object.keys(raw.people).forEach(function(k){
+        var p=raw.people[k];
+        if(!p||typeof p.name!=="string") return;
+        var name=p.name.trim().slice(0,40);
+        if(!name) return;
+        if(st.people.some(function(q){return q.name===name;})) return;
+        st.people.push({key:k,name:name,busy:decodeDays(p.busy)});
+      });
+    }
   }
+  st.people.sort(function(a,b){return a.name.localeCompare(b.name,"de");});
+  state=st;
 }
-function shareURL(){ return location.href.split("#")[0]+buildHash(state); }
-function shareMessage(){
-  return "⛺ Wann fahren wir? Trag bitte deine Tage ein und schick danach den NEUEN Link in die Gruppe:\n"+shareURL();
+function refresh(){
+  return dbGet("").then(function(raw){
+    applyRaw(raw);
+    if(ui.view==="list"||ui.view==="loading"||ui.view==="error"){ ui.view="list"; render(); }
+  });
 }
 
-/* ---------- slot computation ---------- */
+/* ===== Live-Updates: Firebase-Stream mit Polling als Reserve ===== */
+var pollTimer=null, es=null, refreshQueued=false;
+function queueRefresh(){
+  if(refreshQueued) return;
+  refreshQueued=true;
+  setTimeout(function(){ refreshQueued=false; refresh().catch(function(){}); },400);
+}
+function startLive(){
+  try{
+    es=new EventSource(DB_URL+"/"+PLAN+".json");
+    es.addEventListener("put",function(){ ui.live=true; queueRefresh(); });
+    es.addEventListener("patch",function(){ ui.live=true; queueRefresh(); });
+    es.onerror=function(){
+      ui.live=false;
+      if(es){ es.close(); es=null; }
+      startPolling();
+      setTimeout(startLive,15000);
+    };
+  }catch(e){ startPolling(); }
+}
+function startPolling(){
+  if(pollTimer) return;
+  pollTimer=setInterval(function(){
+    if(ui.view==="list") refresh().catch(function(){});
+  },5000);
+}
+
+/* ===== Termin-Berechnung ===== */
 function computeSlots(){
   var len=state.nights+1, out=[];
   for(var s=1;s+len-1<=DAYS;s++){
@@ -300,7 +340,7 @@ function computeSlots(){
   return out;
 }
 
-/* ---------- DOM helpers ---------- */
+/* ===== DOM-Helfer ===== */
 function h(tag,attrs){
   var el=document.createElement(tag);
   if(attrs) for(var k in attrs){
@@ -316,29 +356,44 @@ function h(tag,attrs){
   return el;
 }
 
-/* ---------- views ---------- */
+/* ===== Ansichten ===== */
 function render(){
   var app=document.getElementById("app");
   app.textContent="";
   app.appendChild(h("p",{class:"eyebrow",text:MONTH_NAME+" "+YEAR+" · "+state.nights+" Nächte · "+(state.nights+1)+" Tage"}));
   app.appendChild(h("h1",{text:"Wann fahren wir?"}));
-  if(ui.view==="share"){ renderShare(app); return; }
-  app.appendChild(h("p",{class:"sub",text:"Trag dich kurz ein – die Seite rechnet automatisch aus, welche Termine für alle passen."}));
+
+  if(ui.view==="loading"){
+    app.appendChild(h("p",{class:"sub",text:"Einen Moment, die Einträge werden geladen …"}));
+    return;
+  }
+  if(ui.view==="error"){
+    app.appendChild(h("div",{class:"notice",text:"Die Einträge konnten nicht geladen werden. Prüfe kurz deine Internetverbindung."}));
+    app.appendChild(h("button",{class:"btn btn-primary",text:"Nochmal versuchen",onclick:function(){
+      ui.view="loading"; render();
+      refresh().catch(function(){ ui.view="error"; render(); });
+    }}));
+    return;
+  }
+
+  app.appendChild(h("p",{class:"sub",text:"Trag dich kurz ein – alle sehen sofort, welche Termine passen. Es gibt nur diesen einen Link."}));
+  if(ui.notice) app.appendChild(h("div",{class:"notice",text:ui.notice}));
   if(ui.view==="edit"){ renderEdit(app); return; }
   renderList(app);
 }
 
 function renderList(app){
-  if(state.people.length){
-    app.appendChild(h("div",{class:"notice",text:"Wichtig: Es zählt immer der neueste Link aus der WhatsApp-Gruppe. Wenn du dich einträgst, schick danach den neuen Link in die Gruppe."}));
+  if(ui.live){
+    app.appendChild(h("p",{class:"live"},h("span",{class:"dot-live"}),"live – Änderungen erscheinen sofort"));
   }
   app.appendChild(h("h2",{text:"Wer hat sich schon eingetragen?"}));
   if(state.people.length){
     var row=h("div",{class:"people"});
     state.people.forEach(function(p){
       var free=DAYS-p.busy.length;
-      row.appendChild(h("button",{class:"chip",onclick:function(){openEdit(p.name);}},
-        p.name+" ",h("small",{text:free+" Tage frei ✎"})));
+      var isMe=p.name===myName;
+      row.appendChild(h("button",{class:"chip"+(isMe?" me":""),onclick:function(){openEdit(p.name);}},
+        p.name+(isMe?" (du)":"")+" ",h("small",{text:free+" Tage frei ✎"})));
     });
     app.appendChild(row);
     app.appendChild(h("p",{class:"hint",text:"Zum Ändern auf deinen Namen tippen."}));
@@ -355,6 +410,12 @@ function renderList(app){
     h("span",{text:"Wie lange fahren wir?"}),
     h("div",{class:"stepper"},minus,
       h("b",{text:state.nights+" Nächte · "+(state.nights+1)+" Tage"}),plus)));
+
+  var msg="⛺ Wann fahren wir? Trag deine Tage hier ein:\n"+location.href.split("#")[0];
+  app.appendChild(h("div",{class:"sharefoot"},
+    h("a",{class:"btn btn-ghost",style:"width:100%",
+      href:"https://wa.me/?text="+encodeURIComponent(msg),
+      target:"_blank",rel:"noopener",text:"Link per WhatsApp teilen"})));
 }
 
 function renderResults(app){
@@ -402,14 +463,14 @@ function renderResults(app){
 }
 
 function openEdit(name){
-  ui.view="edit"; ui.editingName=name; ui.nameError="";
+  ui.view="edit"; ui.editingName=name; ui.nameError=""; ui.notice=""; ui.confirmDelete=false;
   if(name){
     var p=state.people.filter(function(x){return x.name===name;})[0];
     ui.draftName=name; ui.busy=new Set(p?p.busy:[]);
   }else{
-    ui.draftName=""; ui.busy=new Set();
+    ui.draftName=(myName&&!state.people.some(function(p){return p.name===myName;}))?myName:"";
+    ui.busy=new Set();
   }
-  ui.confirmDelete=false;
   render();
   window.scrollTo(0,0);
 }
@@ -452,9 +513,11 @@ function renderEdit(app){
     h("button",{class:"btn btn-ghost",text:"Alles auf rot",onclick:function(){
       ui.busy=new Set(); for(var i=1;i<=DAYS;i++)ui.busy.add(i); render();}})));
 
-  var saveBtn=h("button",{class:"btn btn-primary",text:"Fertig",onclick:onSave});
+  var saveBtn=h("button",{class:"btn btn-primary",text:ui.saving?"Wird gespeichert …":"Speichern",onclick:onSave});
+  if(ui.saving) saveBtn.disabled=true;
   var cancel=h("button",{class:"btn btn-ghost",text:"Abbrechen",onclick:function(){
     ui.view="list"; render();}});
+  if(ui.saving) cancel.disabled=true;
   card.appendChild(h("div",{class:"btn-row"},cancel,saveBtn));
 
   if(ui.editingName){
@@ -462,11 +525,21 @@ function renderEdit(app){
       text:ui.confirmDelete?"Wirklich löschen?":"Meinen Eintrag löschen",
       onclick:function(){
         if(!ui.confirmDelete){ui.confirmDelete=true;render();return;}
-        var ns=JSON.parse(JSON.stringify(state));
-        ns.people=ns.people.filter(function(p){return p.name!==ui.editingName;});
-        applyState(ns);
-        ui.view="share"; ui.copied=""; render(); window.scrollTo(0,0);
+        var name=ui.editingName;
+        ui.saving=true; render();
+        dbDelete("/people/"+keyFor(name)).then(function(){
+          return refresh();
+        }).then(function(){
+          ui.saving=false; ui.view="list";
+          ui.notice="Eintrag gelöscht.";
+          render();
+        }).catch(function(){
+          ui.saving=false;
+          ui.nameError="Löschen hat nicht geklappt – bitte nochmal versuchen.";
+          render();
+        });
       }});
+    if(ui.saving) del.disabled=true;
     card.appendChild(del);
   }
   app.appendChild(card);
@@ -481,63 +554,47 @@ function onSave(){
     render(); return;
   }
   var busy=Array.from(ui.busy).sort(function(a,b){return a-b;});
-  var ns=JSON.parse(JSON.stringify(state));
-  if(ui.editingName){
-    var p=ns.people.filter(function(x){return x.name===ui.editingName;})[0];
-    if(p){ p.name=name; p.busy=busy; }
-    else ns.people.push({name:name,busy:busy});
-  }else{
-    ns.people.push({name:name,busy:busy});
+  ui.saving=true; render();
+
+  var work=Promise.resolve();
+  /* Umbenannt? Alten Schlüssel entfernen */
+  if(ui.editingName && ui.editingName!==name){
+    work=dbDelete("/people/"+keyFor(ui.editingName)).catch(function(){});
   }
-  applyState(ns);
-  ui.view="share"; ui.copied=""; render(); window.scrollTo(0,0);
+  work.then(function(){
+    return dbPut("/people/"+keyFor(name),{name:name,busy:encodeDays(busy)});
+  }).then(function(){
+    myName=name;
+    try{ localStorage.setItem("tf-me",name); }catch(e){}
+    return refresh();
+  }).then(function(){
+    ui.saving=false; ui.view="list";
+    ui.notice="Gespeichert! Alle anderen sehen deine Auswahl automatisch – du musst nichts weiterleiten.";
+    render();
+    setTimeout(function(){ if(ui.notice){ ui.notice=""; if(ui.view==="list") render(); } },6000);
+  }).catch(function(){
+    ui.saving=false;
+    ui.nameError="Speichern hat nicht geklappt – prüfe deine Internetverbindung und tippe nochmal auf „Speichern“.";
+    render();
+  });
 }
 
 function changeNights(delta){
   var n=state.nights+delta;
   if(n<1||n>7) return;
-  var ns=JSON.parse(JSON.stringify(state));
-  ns.nights=n;
-  applyState(ns);
-  ui.view="share"; ui.copied=""; render();
+  dbPut("/nights",n).then(function(){ return refresh(); }).catch(function(){
+    ui.notice="Ändern hat nicht geklappt – bitte nochmal versuchen."; render();
+  });
 }
 
-function renderShare(app){
-  var card=h("div",{class:"card"});
-  card.appendChild(h("div",{class:"bigcheck",text:"✅"}));
-  card.appendChild(h("p",{class:"share-title",text:"Gespeichert!"}));
-  card.appendChild(h("p",{class:"hint",style:"margin:0 0 4px",
-    text:"Deine Auswahl steckt jetzt in einem neuen Link. Damit die anderen sie sehen:"}));
-  card.appendChild(h("p",{style:"font-weight:600;margin:0 0 14px",
-    text:"Schick den neuen Link in die WhatsApp-Gruppe."}));
-
-  var stack=h("div",{class:"stack"});
-  var waBtn=h("a",{class:"btn btn-wa",
-    href:"https://wa.me/?text="+encodeURIComponent(shareMessage()),
-    target:"_blank",rel:"noopener",text:"Per WhatsApp schicken"});
-  stack.appendChild(waBtn);
-
-  var copied=h("p",{class:"copied",text:ui.copied});
-  stack.appendChild(h("button",{class:"btn btn-ghost",text:"Oder: Link kopieren",onclick:function(){
-    var url=shareURL();
-    function done(ok){ ui.copied=ok?"Link kopiert – einfach in die Gruppe einfügen.":"Kopieren ging nicht – halte die Adresszeile oben gedrückt und kopiere den Link von dort."; render(); }
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(url).then(function(){done(true);},function(){done(false);});
-    }else{ done(false); }
-  }}));
-  stack.appendChild(copied);
-  stack.appendChild(h("button",{class:"btn btn-ghost",text:"Zur Übersicht",onclick:function(){
-    ui.view="list"; render();}}));
-  card.appendChild(stack);
-  app.appendChild(card);
-}
-
-window.addEventListener("hashchange",function(){
-  state=parseHash();
-  if(ui.view==="list") render();
-});
-
+/* ===== Start ===== */
 render();
+refresh().then(function(){
+  startLive();
+  startPolling();
+}).catch(function(){
+  ui.view="error"; render();
+});
 })();
 </script>
 </body>
