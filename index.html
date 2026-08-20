@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wann fahren wir?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+:root{
+  --bg:#F4F6F1;
+  --card:#FFFFFF;
+  --ink:#1E2A22;
+  --muted:#5C6B60;
+  --line:#DDE4DA;
+  --accent:#2E6B4E;
+  --accent-ink:#FFFFFF;
+  --free-bg:#DFF0E4;
+  --free-ink:#1F5C3D;
+  --free-line:#B9DCC6;
+  --busy-bg:#F6DCD7;
+  --busy-ink:#8C3B32;
+  --busy-line:#E6BBB3;
+  --gold:#B77F2A;
+  --gold-bg:#F5E9D4;
+  --wa:#1FAF57;
+  --wa-ink:#FFFFFF;
+  --shadow:0 1px 2px rgba(30,42,34,.06),0 4px 14px rgba(30,42,34,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131A15;
+    --card:#1C241E;
+    --ink:#E7EEE7;
+    --muted:#9AA89D;
+    --line:#2C362E;
+    --accent:#6FBF92;
+    --accent-ink:#0F1F16;
+    --free-bg:#1E3B2B;
+    --free-ink:#A5DDBC;
+    --free-line:#2E5940;
+    --busy-bg:#43261F;
+    --busy-ink:#EBA89C;
+    --busy-line:#5F352C;
+    --gold:#E0B061;
+    --gold-bg:#3A2F1B;
+    --wa:#2BC46A;
+    --wa-ink:#0E1F14;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131A15;
+  --card:#1C241E;
+  --ink:#E7EEE7;
+  --muted:#9AA89D;
+  --line:#2C362E;
+  --accent:#6FBF92;
+  --accent-ink:#0F1F16;
+  --free-bg:#1E3B2B;
+  --free-ink:#A5DDBC;
+  --free-line:#2E5940;
+  --busy-bg:#43261F;
+  --busy-ink:#EBA89C;
+  --busy-line:#5F352C;
+  --gold:#E0B061;
+  --gold-bg:#3A2F1B;
+  --wa:#2BC46A;
+  --wa-ink:#0E1F14;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:16px;
+  line-height:1.5;
+  -webkit-tap-highlight-color:transparent;
+}
+#app{max-width:560px;margin:0 auto;padding:20px 16px 56px}
+.eyebrow{
+  font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;margin:0 0 4px;
+}
+h1{
+  font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  font-weight:700;font-size:2rem;line-height:1.1;margin:0 0 6px;text-wrap:balance;
+}
+.sub{color:var(--muted);margin:0 0 22px;font-size:.95rem}
+h2{
+  font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  font-weight:600;font-size:1.15rem;margin:28px 0 10px;
+}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:16px;box-shadow:var(--shadow);
+}
+.notice{
+  background:var(--gold-bg);color:var(--ink);border:1px solid var(--gold);
+  border-radius:10px;padding:10px 12px;margin:0 0 16px;font-size:.92rem;
+}
+.people{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--card);border:1px solid var(--line);border-radius:999px;
+  padding:8px 14px;font-size:.95rem;font-weight:500;color:var(--ink);
+  cursor:pointer;font-family:inherit;
+}
+.chip small{color:var(--muted);font-weight:400}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  border:none;border-radius:12px;padding:13px 20px;font-size:1rem;font-weight:600;
+  font-family:inherit;cursor:pointer;text-decoration:none;
+}
+.btn:focus-visible,.chip:focus-visible,.day:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn-primary{background:var(--accent);color:var(--accent-ink);width:100%}
+.btn-wa{background:var(--wa);color:var(--wa-ink);width:100%;font-size:1.05rem}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+.btn-danger{background:transparent;color:var(--busy-ink);border:1px solid var(--busy-line)}
+.btn-row{display:flex;gap:10px;margin-top:14px}
+.btn-row .btn{flex:1}
+.btn[disabled]{opacity:.55;cursor:default}
+.stack{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+label{display:block;font-weight:600;font-size:.9rem;margin:0 0 6px}
+input[type=text]{
+  width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg);
+  color:var(--ink);font:inherit;padding:11px 12px;
+}
+input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
+.field-error{color:var(--busy-ink);font-size:.88rem;margin:6px 0 0}
+.hint{color:var(--muted);font-size:.92rem;margin:4px 0 12px}
+.legend{display:flex;gap:14px;margin:0 0 10px;font-size:.85rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:14px;height:14px;border-radius:4px;display:inline-block}
+.dot-free{background:var(--free-bg);border:1px solid var(--free-line)}
+.dot-busy{background:var(--busy-bg);border:1px solid var(--busy-line)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-h{
+  text-align:center;font-size:.75rem;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.04em;padding:2px 0;
+}
+.day{
+  aspect-ratio:1/1;border-radius:10px;border:1px solid var(--free-line);
+  background:var(--free-bg);color:var(--free-ink);
+  font:inherit;font-weight:600;font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-variant-numeric:tabular-nums;
+}
+.day.busy{
+  background:var(--busy-bg);border-color:var(--busy-line);color:var(--busy-ink);
+  text-decoration:line-through;font-weight:400;
+}
+.day.blank{visibility:hidden}
+.quick{display:flex;gap:8px;margin:12px 0 0}
+.quick .btn{flex:1;padding:9px 8px;font-size:.85rem;font-weight:500}
+.slot{
+  display:flex;align-items:center;gap:12px;justify-content:space-between;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;margin:0 0 8px;box-shadow:var(--shadow);
+}
+.slot.perfect{border-color:var(--free-line);background:var(--free-bg)}
+.slot-date{font-weight:600}
+.slot.perfect .slot-date{color:var(--free-ink)}
+.slot-sub{font-size:.85rem;color:var(--muted);margin-top:1px}
+.slot.perfect .slot-sub{color:var(--free-ink);opacity:.85}
+.pill{
+  flex-shrink:0;border-radius:999px;padding:4px 11px;font-size:.85rem;font-weight:600;
+  font-variant-numeric:tabular-nums;background:var(--bg);color:var(--muted);
+  border:1px solid var(--line);
+}
+.slot.perfect .pill{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tag{
+  display:inline-block;font-size:.72rem;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--gold);margin-left:8px;
+}
+details{margin-top:6px}
+summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:6px 2px}
+.settings{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin-top:30px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:.92rem;
+}
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{
+  width:36px;height:36px;border-radius:10px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);font-size:1.1rem;font-weight:600;
+  cursor:pointer;font-family:inherit;
+}
+.stepper b{min-width:120px;text-align:center;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);font-size:.95rem}
+.bigcheck{
+  font-size:2.6rem;line-height:1;margin:6px 0 10px;
+}
+.share-title{
+  font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  font-weight:700;font-size:1.4rem;margin:0 0 8px;
+}
+.copied{color:var(--free-ink);font-size:.9rem;font-weight:600;text-align:center;min-height:1.4em;margin:6px 0 0}
+@media (prefers-reduced-motion: no-preference){
+  .day,.chip,.btn{transition:background .12s,border-color .12s,color .12s}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function(){
+"use strict";
+var YEAR=2026, MONTH=8, DAYS=30, MONTH_NAME="September";
+var WD=["So","Mo","Di","Mi","Do","Fr","Sa"];
+
+/* ---------- state lives in the URL fragment ---------- */
+/* format:  #2|Anna;1-3,12|Ben;4-7   (first = nights, then name;busy-days) */
+
+function decodeDays(str){
+  var out=[];
+  if(!str) return out;
+  str.split(",").forEach(function(part){
+    var m=part.split("-");
+    var a=parseInt(m[0],10), b=m.length>1?parseInt(m[1],10):a;
+    if(isNaN(a)||isNaN(b)) return;
+    for(var d=Math.max(1,a); d<=Math.min(DAYS,b); d++) out.push(d);
+  });
+  return out;
+}
+function encodeDays(arr){
+  var a=arr.slice().sort(function(x,y){return x-y;});
+  var parts=[],i=0;
+  while(i<a.length){
+    var j=i;
+    while(j+1<a.length && a[j+1]===a[j]+1) j++;
+    parts.push(j>i ? a[i]+"-"+a[j] : String(a[i]));
+    i=j+1;
+  }
+  return parts.join(",");
+}
+function parseHash(){
+  var st={nights:2,people:[]};
+  var h=location.hash.replace(/^#/,"");
+  if(!h) return st;
+  var toks=h.split("|");
+  var n=parseInt(toks[0],10);
+  if(!isNaN(n)&&n>=1&&n<=7) st.nights=n;
+  for(var i=1;i<toks.length;i++){
+    var t=toks[i]; if(!t) continue;
+    var ix=t.indexOf(";");
+    var rawName=ix>=0?t.slice(0,ix):t;
+    var name;
+    try{ name=decodeURIComponent(rawName); }catch(e){ name=rawName; }
+    name=name.trim().slice(0,40);
+    if(!name) continue;
+    if(st.people.some(function(p){return p.name===name;})) continue;
+    st.people.push({name:name,busy:decodeDays(ix>=0?t.slice(ix+1):"")});
+    if(st.people.length>=20) break;
+  }
+  return st;
+}
+function buildHash(st){
+  var toks=[String(st.nights)];
+  st.people.forEach(function(p){
+    toks.push(encodeURIComponent(p.name)+";"+encodeDays(p.busy));
+  });
+  return "#"+toks.join("|");
+}
+
+var state=parseHash();
+var ui={view:"list",editingName:null,draftName:"",busy:new Set(),nameError:"",copied:""};
+
+function wd(d){ return WD[new Date(YEAR,MONTH,d).getDay()]; }
+function isWeekend(d){ var g=new Date(YEAR,MONTH,d).getDay(); return g===0||g===6; }
+
+function applyState(newState){
+  state=newState;
+  try{
+    history.replaceState(null,"",location.pathname+location.search+buildHash(state));
+  }catch(e){
+    try{ location.hash=buildHash(state).slice(1); }catch(e2){}
+  }
+}
+function shareURL(){ return location.href.split("#")[0]+buildHash(state); }
+function shareMessage(){
+  return "⛺ Wann fahren wir? Trag bitte deine Tage ein und schick danach den NEUEN Link in die Gruppe:\n"+shareURL();
+}
+
+/* ---------- slot computation ---------- */
+function computeSlots(){
+  var len=state.nights+1, out=[];
+  for(var s=1;s+len-1<=DAYS;s++){
+    var days=[]; for(var i=0;i<len;i++) days.push(s+i);
+    var cant=state.people.filter(function(p){
+      return days.some(function(d){return p.busy.indexOf(d)>=0;});
+    }).map(function(p){return p.name;});
+    out.push({s:s,e:s+len-1,cant:cant,can:state.people.length-cant.length,
+      fullWeekend:days.some(function(d){return new Date(YEAR,MONTH,d).getDay()===6;}) &&
+                  days.some(function(d){return new Date(YEAR,MONTH,d).getDay()===0;}),
+      wkd:days.filter(isWeekend).length});
+  }
+  return out;
+}
+
+/* ---------- DOM helpers ---------- */
+function h(tag,attrs){
+  var el=document.createElement(tag);
+  if(attrs) for(var k in attrs){
+    if(k==="text") el.textContent=attrs[k];
+    else if(k==="onclick") el.addEventListener("click",attrs[k]);
+    else if(k==="oninput") el.addEventListener("input",attrs[k]);
+    else el.setAttribute(k,attrs[k]);
+  }
+  for(var i=2;i<arguments.length;i++){
+    var c=arguments[i];
+    if(c!=null) el.appendChild(typeof c==="string"?document.createTextNode(c):c);
+  }
+  return el;
+}
+
+/* ---------- views ---------- */
+function render(){
+  var app=document.getElementById("app");
+  app.textContent="";
+  app.appendChild(h("p",{class:"eyebrow",text:MONTH_NAME+" "+YEAR+" · "+state.nights+" Nächte · "+(state.nights+1)+" Tage"}));
+  app.appendChild(h("h1",{text:"Wann fahren wir?"}));
+  if(ui.view==="share"){ renderShare(app); return; }
+  app.appendChild(h("p",{class:"sub",text:"Trag dich kurz ein – die Seite rechnet automatisch aus, welche Termine für alle passen."}));
+  if(ui.view==="edit"){ renderEdit(app); return; }
+  renderList(app);
+}
+
+function renderList(app){
+  if(state.people.length){
+    app.appendChild(h("div",{class:"notice",text:"Wichtig: Es zählt immer der neueste Link aus der WhatsApp-Gruppe. Wenn du dich einträgst, schick danach den neuen Link in die Gruppe."}));
+  }
+  app.appendChild(h("h2",{text:"Wer hat sich schon eingetragen?"}));
+  if(state.people.length){
+    var row=h("div",{class:"people"});
+    state.people.forEach(function(p){
+      var free=DAYS-p.busy.length;
+      row.appendChild(h("button",{class:"chip",onclick:function(){openEdit(p.name);}},
+        p.name+" ",h("small",{text:free+" Tage frei ✎"})));
+    });
+    app.appendChild(row);
+    app.appendChild(h("p",{class:"hint",text:"Zum Ändern auf deinen Namen tippen."}));
+  }else{
+    app.appendChild(h("p",{class:"empty",text:"Noch niemand. Mach du den Anfang!"}));
+  }
+  app.appendChild(h("button",{class:"btn btn-primary",onclick:function(){openEdit(null);},text:"+ Ich trag mich ein"}));
+
+  renderResults(app);
+
+  var minus=h("button",{text:"−",onclick:function(){changeNights(-1);},"aria-label":"Eine Nacht weniger"});
+  var plus=h("button",{text:"+",onclick:function(){changeNights(1);},"aria-label":"Eine Nacht mehr"});
+  app.appendChild(h("div",{class:"settings"},
+    h("span",{text:"Wie lange fahren wir?"}),
+    h("div",{class:"stepper"},minus,
+      h("b",{text:state.nights+" Nächte · "+(state.nights+1)+" Tage"}),plus)));
+}
+
+function renderResults(app){
+  app.appendChild(h("h2",{text:"Mögliche Termine"}));
+  var P=state.people.length;
+  if(!P){
+    app.appendChild(h("p",{class:"empty",text:"Sobald sich die Ersten eingetragen haben, erscheinen hier die Termine, die passen."}));
+    return;
+  }
+  var slots=computeSlots();
+  var perfect=slots.filter(function(s){return s.can===P;});
+  var rest=slots.filter(function(s){return s.can<P;}).sort(function(a,b){
+    return b.can-a.can || b.wkd-a.wkd || a.s-b.s;
+  });
+
+  function slotCard(sl,isPerfect){
+    var left=h("div",null,
+      h("div",{class:"slot-date"},
+        wd(sl.s)+" "+sl.s+". – "+wd(sl.e)+" "+sl.e+". Sep.",
+        sl.fullWeekend?h("span",{class:"tag",text:"Wochenende"}):null),
+      h("div",{class:"slot-sub",text:isPerfect?
+        (P===1?"Passt bisher":"Da können alle "+P):
+        "Nicht dabei: "+sl.cant.join(", ")}));
+    return h("div",{class:"slot"+(isPerfect?" perfect":"")},left,
+      h("span",{class:"pill",text:sl.can+"/"+P}));
+  }
+
+  if(perfect.length){
+    perfect.slice(0,6).forEach(function(sl){app.appendChild(slotCard(sl,true));});
+    if(perfect.length>6){
+      var det=h("details",null,h("summary",{text:(perfect.length-6)+" weitere Termine, die für alle passen"}));
+      perfect.slice(6).forEach(function(sl){det.appendChild(slotCard(sl,true));});
+      app.appendChild(det);
+    }
+  }else{
+    app.appendChild(h("p",{class:"hint",text:"Kein Termin passt für alle – das sind die besten Optionen:"}));
+    rest.slice(0,5).forEach(function(sl){app.appendChild(slotCard(sl,false));});
+    rest=rest.slice(5);
+  }
+  if(perfect.length&&rest.length){
+    var det2=h("details",null,h("summary",{text:"Termine anzeigen, die nicht für alle passen"}));
+    rest.filter(function(s){return s.can>0;}).slice(0,15).forEach(function(sl){det2.appendChild(slotCard(sl,false));});
+    app.appendChild(det2);
+  }
+}
+
+function openEdit(name){
+  ui.view="edit"; ui.editingName=name; ui.nameError="";
+  if(name){
+    var p=state.people.filter(function(x){return x.name===name;})[0];
+    ui.draftName=name; ui.busy=new Set(p?p.busy:[]);
+  }else{
+    ui.draftName=""; ui.busy=new Set();
+  }
+  ui.confirmDelete=false;
+  render();
+  window.scrollTo(0,0);
+}
+
+function renderEdit(app){
+  var card=h("div",{class:"card"});
+  card.appendChild(h("label",{for:"tf-name",text:"Dein Name"}));
+  var input=h("input",{type:"text",id:"tf-name",value:ui.draftName,placeholder:"z. B. Anna",
+    autocomplete:"off",oninput:function(e){ui.draftName=e.target.value;ui.nameError="";}});
+  card.appendChild(input);
+  if(ui.nameError) card.appendChild(h("p",{class:"field-error",text:ui.nameError}));
+
+  card.appendChild(h("p",{class:"hint",style:"margin-top:14px",
+    text:"Tippe die Tage an, an denen du KEINE Zeit hast – sie werden rot durchgestrichen."}));
+  card.appendChild(h("div",{class:"legend"},
+    h("span",null,h("span",{class:"dot dot-free"}),"kann ich"),
+    h("span",null,h("span",{class:"dot dot-busy"}),"kann ich nicht")));
+
+  var cal=h("div",{class:"cal",role:"group","aria-label":"Kalender September 2026"});
+  ["Mo","Di","Mi","Do","Fr","Sa","So"].forEach(function(w){
+    cal.appendChild(h("div",{class:"cal-h",text:w}));
+  });
+  var firstDow=(new Date(YEAR,MONTH,1).getDay()+6)%7;
+  for(var b=0;b<firstDow;b++) cal.appendChild(h("div",{class:"day blank"}));
+  for(var d=1;d<=DAYS;d++){
+    (function(d){
+      var busy=ui.busy.has(d);
+      cal.appendChild(h("button",{
+        class:"day"+(busy?" busy":""),
+        "aria-pressed":busy?"true":"false",
+        "aria-label":d+". September, "+(busy?"keine Zeit":"Zeit"),
+        onclick:function(){ if(ui.busy.has(d))ui.busy.delete(d);else ui.busy.add(d); render(); }
+      },String(d)));
+    })(d);
+  }
+  card.appendChild(cal);
+
+  card.appendChild(h("div",{class:"quick"},
+    h("button",{class:"btn btn-ghost",text:"Alles auf grün",onclick:function(){ui.busy=new Set();render();}}),
+    h("button",{class:"btn btn-ghost",text:"Alles auf rot",onclick:function(){
+      ui.busy=new Set(); for(var i=1;i<=DAYS;i++)ui.busy.add(i); render();}})));
+
+  var saveBtn=h("button",{class:"btn btn-primary",text:"Fertig",onclick:onSave});
+  var cancel=h("button",{class:"btn btn-ghost",text:"Abbrechen",onclick:function(){
+    ui.view="list"; render();}});
+  card.appendChild(h("div",{class:"btn-row"},cancel,saveBtn));
+
+  if(ui.editingName){
+    var del=h("button",{class:"btn btn-danger",style:"width:100%;margin-top:10px",
+      text:ui.confirmDelete?"Wirklich löschen?":"Meinen Eintrag löschen",
+      onclick:function(){
+        if(!ui.confirmDelete){ui.confirmDelete=true;render();return;}
+        var ns=JSON.parse(JSON.stringify(state));
+        ns.people=ns.people.filter(function(p){return p.name!==ui.editingName;});
+        applyState(ns);
+        ui.view="share"; ui.copied=""; render(); window.scrollTo(0,0);
+      }});
+    card.appendChild(del);
+  }
+  app.appendChild(card);
+}
+
+function onSave(){
+  var name=ui.draftName.trim().slice(0,40);
+  if(!name){ ui.nameError="Bitte gib zuerst deinen Namen ein."; render(); return; }
+  var taken=state.people.some(function(p){return p.name===name && p.name!==ui.editingName;});
+  if(taken){
+    ui.nameError="Diesen Namen gibt es schon. Wenn du das bist: geh zurück und tippe auf deinen Namen. Sonst nimm z. B. „"+name+" B.“";
+    render(); return;
+  }
+  var busy=Array.from(ui.busy).sort(function(a,b){return a-b;});
+  var ns=JSON.parse(JSON.stringify(state));
+  if(ui.editingName){
+    var p=ns.people.filter(function(x){return x.name===ui.editingName;})[0];
+    if(p){ p.name=name; p.busy=busy; }
+    else ns.people.push({name:name,busy:busy});
+  }else{
+    ns.people.push({name:name,busy:busy});
+  }
+  applyState(ns);
+  ui.view="share"; ui.copied=""; render(); window.scrollTo(0,0);
+}
+
+function changeNights(delta){
+  var n=state.nights+delta;
+  if(n<1||n>7) return;
+  var ns=JSON.parse(JSON.stringify(state));
+  ns.nights=n;
+  applyState(ns);
+  ui.view="share"; ui.copied=""; render();
+}
+
+function renderShare(app){
+  var card=h("div",{class:"card"});
+  card.appendChild(h("div",{class:"bigcheck",text:"✅"}));
+  card.appendChild(h("p",{class:"share-title",text:"Gespeichert!"}));
+  card.appendChild(h("p",{class:"hint",style:"margin:0 0 4px",
+    text:"Deine Auswahl steckt jetzt in einem neuen Link. Damit die anderen sie sehen:"}));
+  card.appendChild(h("p",{style:"font-weight:600;margin:0 0 14px",
+    text:"Schick den neuen Link in die WhatsApp-Gruppe."}));
+
+  var stack=h("div",{class:"stack"});
+  var waBtn=h("a",{class:"btn btn-wa",
+    href:"https://wa.me/?text="+encodeURIComponent(shareMessage()),
+    target:"_blank",rel:"noopener",text:"Per WhatsApp schicken"});
+  stack.appendChild(waBtn);
+
+  var copied=h("p",{class:"copied",text:ui.copied});
+  stack.appendChild(h("button",{class:"btn btn-ghost",text:"Oder: Link kopieren",onclick:function(){
+    var url=shareURL();
+    function done(ok){ ui.copied=ok?"Link kopiert – einfach in die Gruppe einfügen.":"Kopieren ging nicht – halte die Adresszeile oben gedrückt und kopiere den Link von dort."; render(); }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){done(true);},function(){done(false);});
+    }else{ done(false); }
+  }}));
+  stack.appendChild(copied);
+  stack.appendChild(h("button",{class:"btn btn-ghost",text:"Zur Übersicht",onclick:function(){
+    ui.view="list"; render();}}));
+  card.appendChild(stack);
+  app.appendChild(card);
+}
+
+window.addEventListener("hashchange",function(){
+  state=parseHash();
+  if(ui.view==="list") render();
+});
+
+render();
+})();
+</script>
+</body>
+</html>
