@@ -124,13 +124,11 @@ h2{
 }
 .btn:focus-visible,.chip:focus-visible,.day:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .btn-primary{background:var(--accent);color:var(--accent-ink);width:100%}
-.btn-wa{background:var(--wa);color:var(--wa-ink);width:100%;font-size:1.05rem}
 .btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
 .btn-danger{background:transparent;color:var(--busy-ink);border:1px solid var(--busy-line)}
 .btn-row{display:flex;gap:10px;margin-top:14px}
 .btn-row .btn{flex:1}
 .btn[disabled]{opacity:.55;cursor:default}
-.stack{display:flex;flex-direction:column;gap:10px;margin-top:14px}
 label{display:block;font-weight:600;font-size:.9rem;margin:0 0 6px}
 input[type=text]{
   width:100%;border:1px solid var(--line);border-radius:10px;background:var(--bg);
@@ -144,6 +142,21 @@ input[type=text]:focus{outline:2px solid var(--accent);outline-offset:1px}
 .dot{width:14px;height:14px;border-radius:4px;display:inline-block}
 .dot-free{background:var(--free-bg);border:1px solid var(--free-line)}
 .dot-busy{background:var(--busy-bg);border:1px solid var(--busy-line)}
+.month{margin:18px 0 0}
+.month-head{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:0 0 8px;
+}
+.month-head b{
+  font-family:"Bricolage Grotesque","Instrument Sans",system-ui,sans-serif;
+  font-weight:600;font-size:1rem;
+}
+.month-head .mini{display:flex;gap:6px}
+.mini button{
+  border:1px solid var(--line);background:transparent;color:var(--muted);
+  border-radius:8px;padding:4px 10px;font-size:.78rem;font-weight:500;
+  cursor:pointer;font-family:inherit;
+}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .cal-h{
   text-align:center;font-size:.75rem;font-weight:600;color:var(--muted);
@@ -212,20 +225,45 @@ summary{cursor:pointer;color:var(--muted);font-size:.92rem;padding:6px 2px}
 
 /* ===== Konfiguration ===== */
 var DB_URL="https://terminfinder-5b9bf-default-rtdb.europe-west1.firebasedatabase.app";
-var PLAN="plan-sept-2026";
-var YEAR=2026, MONTH=8, DAYS=30, MONTH_NAME="September";
+var PLAN="plan-sept-2026";   /* Pfadname historisch (war der Septembertrip) – Inhalt ist jetzt der Semesterferien-Planer */
+var TITLE="Wann fahren wir?";
+var RANGE_LABEL="Semesterferien · 15. Jän. – 15. März 2027";
+var START={y:2027,m:0,d:15};       /* 15. Jänner 2027 */
+var END={y:2027,m:2,d:15};         /* 15. März 2027 */
+var LS_ME="tf-me-semester";
 
 var WD=["So","Mo","Di","Mi","Do","Fr","Sa"];
-var state={nights:2,people:[]};   /* people: [{key,name,busy:[..]}] */
+var MON=["Jän.","Feb.","März","Apr.","Mai","Juni","Juli","Aug.","Sep.","Okt.","Nov.","Dez."];
+var MONL=["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+
+/* Tag = Offset 0..N-1 ab Startdatum */
+function dateOf(off){ return new Date(START.y,START.m,START.d+off); }
+var N=Math.round((new Date(END.y,END.m,END.d)-new Date(START.y,START.m,START.d))/86400000)+1;
+
+function wd(off){ return WD[dateOf(off).getDay()]; }
+function isWeekend(off){ var g=dateOf(off).getDay(); return g===0||g===6; }
+function fmt(off){ var dt=dateOf(off); return WD[dt.getDay()]+" "+dt.getDate()+". "+MON[dt.getMonth()]; }
+
+/* Monatsliste für den Kalender */
+var MONTHS=(function(){
+  var out=[],off=0;
+  while(off<N){
+    var dt=dateOf(off);
+    var y=dt.getFullYear(),m=dt.getMonth();
+    var from=off;
+    while(off<N){ var t=dateOf(off); if(t.getMonth()!==m||t.getFullYear()!==y) break; off++; }
+    out.push({y:y,m:m,fromOff:from,toOff:off-1});
+  }
+  return out;
+})();
+
+var state={nights:2,people:[]};
 var ui={view:"loading",editingName:null,draftName:"",busy:new Set(),
         nameError:"",notice:"",saving:false,confirmDelete:false,live:false};
 var myName=null;
-try{ myName=localStorage.getItem("tf-me"); }catch(e){}
+try{ myName=localStorage.getItem(LS_ME); }catch(e){}
 
-function wd(d){ return WD[new Date(YEAR,MONTH,d).getDay()]; }
-function isWeekend(d){ var g=new Date(YEAR,MONTH,d).getDay(); return g===0||g===6; }
-
-/* ===== Kompakte Tages-Codierung ("1-3,12") ===== */
+/* ===== Kompakte Codierung der Offsets ("0-4,12") ===== */
 function decodeDays(str){
   var out=[];
   if(!str||typeof str!=="string") return out;
@@ -233,7 +271,7 @@ function decodeDays(str){
     var m=part.split("-");
     var a=parseInt(m[0],10), b=m.length>1?parseInt(m[1],10):a;
     if(isNaN(a)||isNaN(b)) return;
-    for(var d=Math.max(1,a); d<=Math.min(DAYS,b); d++) out.push(d);
+    for(var d=Math.max(0,a); d<=Math.min(N-1,b); d++) out.push(d);
   });
   return out;
 }
@@ -250,10 +288,7 @@ function encodeDays(arr){
 }
 
 /* ===== Datenbank (Firebase Realtime Database, REST) ===== */
-function keyFor(name){
-  /* Firebase-Pfade erlauben . $ # [ ] / nicht */
-  return encodeURIComponent(name).replace(/\./g,"%2E");
-}
+function keyFor(name){ return encodeURIComponent(name).replace(/\./g,"%2E"); }
 function dbGet(path){
   return fetch(DB_URL+"/"+PLAN+path+".json",{cache:"no-store"}).then(function(r){
     if(!r.ok) throw new Error("GET "+r.status);
@@ -297,7 +332,7 @@ function refresh(){
   });
 }
 
-/* ===== Live-Updates: Firebase-Stream mit Polling als Reserve ===== */
+/* ===== Live-Updates ===== */
 var pollTimer=null, es=null, refreshQueued=false;
 function queueRefresh(){
   if(refreshQueued) return;
@@ -327,14 +362,14 @@ function startPolling(){
 /* ===== Termin-Berechnung ===== */
 function computeSlots(){
   var len=state.nights+1, out=[];
-  for(var s=1;s+len-1<=DAYS;s++){
+  for(var s=0;s+len-1<N;s++){
     var days=[]; for(var i=0;i<len;i++) days.push(s+i);
     var cant=state.people.filter(function(p){
       return days.some(function(d){return p.busy.indexOf(d)>=0;});
     }).map(function(p){return p.name;});
     out.push({s:s,e:s+len-1,cant:cant,can:state.people.length-cant.length,
-      fullWeekend:days.some(function(d){return new Date(YEAR,MONTH,d).getDay()===6;}) &&
-                  days.some(function(d){return new Date(YEAR,MONTH,d).getDay()===0;}),
+      fullWeekend:days.some(function(d){return dateOf(d).getDay()===6;}) &&
+                  days.some(function(d){return dateOf(d).getDay()===0;}),
       wkd:days.filter(isWeekend).length});
   }
   return out;
@@ -360,8 +395,8 @@ function h(tag,attrs){
 function render(){
   var app=document.getElementById("app");
   app.textContent="";
-  app.appendChild(h("p",{class:"eyebrow",text:MONTH_NAME+" "+YEAR+" · "+state.nights+" Nächte · "+(state.nights+1)+" Tage"}));
-  app.appendChild(h("h1",{text:"Wann fahren wir?"}));
+  app.appendChild(h("p",{class:"eyebrow",text:RANGE_LABEL+" · "+state.nights+" Nächte"}));
+  app.appendChild(h("h1",{text:TITLE}));
 
   if(ui.view==="loading"){
     app.appendChild(h("p",{class:"sub",text:"Einen Moment, die Einträge werden geladen …"}));
@@ -390,7 +425,7 @@ function renderList(app){
   if(state.people.length){
     var row=h("div",{class:"people"});
     state.people.forEach(function(p){
-      var free=DAYS-p.busy.length;
+      var free=N-p.busy.length;
       var isMe=p.name===myName;
       row.appendChild(h("button",{class:"chip"+(isMe?" me":""),onclick:function(){openEdit(p.name);}},
         p.name+(isMe?" (du)":"")+" ",h("small",{text:free+" Tage frei ✎"})));
@@ -411,7 +446,7 @@ function renderList(app){
     h("div",{class:"stepper"},minus,
       h("b",{text:state.nights+" Nächte · "+(state.nights+1)+" Tage"}),plus)));
 
-  var msg="⛺ Wann fahren wir? Trag deine Tage hier ein:\n"+location.href.split("#")[0];
+  var msg="⛺ Semesterferien – wann fahren wir? Trag deine Tage hier ein:\n"+location.href.split("#")[0];
   app.appendChild(h("div",{class:"sharefoot"},
     h("a",{class:"btn btn-ghost",style:"width:100%",
       href:"https://wa.me/?text="+encodeURIComponent(msg),
@@ -434,7 +469,7 @@ function renderResults(app){
   function slotCard(sl,isPerfect){
     var left=h("div",null,
       h("div",{class:"slot-date"},
-        wd(sl.s)+" "+sl.s+". – "+wd(sl.e)+" "+sl.e+". Sep.",
+        fmt(sl.s)+" – "+fmt(sl.e),
         sl.fullWeekend?h("span",{class:"tag",text:"Wochenende"}):null),
       h("div",{class:"slot-sub",text:isPerfect?
         (P===1?"Passt bisher":"Da können alle "+P):
@@ -444,10 +479,14 @@ function renderResults(app){
   }
 
   if(perfect.length){
-    perfect.slice(0,6).forEach(function(sl){app.appendChild(slotCard(sl,true));});
-    if(perfect.length>6){
-      var det=h("details",null,h("summary",{text:(perfect.length-6)+" weitere Termine, die für alle passen"}));
-      perfect.slice(6).forEach(function(sl){det.appendChild(slotCard(sl,true));});
+    var sorted=perfect.slice().sort(function(a,b){
+      return (b.fullWeekend?1:0)-(a.fullWeekend?1:0) || a.s-b.s;
+    });
+    sorted.slice(0,6).forEach(function(sl){app.appendChild(slotCard(sl,true));});
+    if(sorted.length>6){
+      var det=h("details",null,h("summary",{text:(sorted.length-6)+" weitere Termine, die für alle passen"}));
+      sorted.slice(6,56).forEach(function(sl){det.appendChild(slotCard(sl,true));});
+      if(sorted.length>56) det.appendChild(h("p",{class:"hint",text:"… und noch mehr. Je mehr Leute sich eintragen, desto kürzer wird die Liste."}));
       app.appendChild(det);
     }
   }else{
@@ -484,39 +523,57 @@ function renderEdit(app){
   if(ui.nameError) card.appendChild(h("p",{class:"field-error",text:ui.nameError}));
 
   card.appendChild(h("p",{class:"hint",style:"margin-top:14px",
-    text:"Tippe die Tage an, an denen du KEINE Zeit hast – sie werden rot durchgestrichen."}));
+    text:"Tippe die Tage an, an denen du KEINE Zeit hast – sie werden rot durchgestrichen. Mit den Knöpfen neben jedem Monat kannst du ganze Monate auf einmal setzen."}));
   card.appendChild(h("div",{class:"legend"},
     h("span",null,h("span",{class:"dot dot-free"}),"kann ich"),
     h("span",null,h("span",{class:"dot dot-busy"}),"kann ich nicht")));
 
-  var cal=h("div",{class:"cal",role:"group","aria-label":"Kalender September 2026"});
-  ["Mo","Di","Mi","Do","Fr","Sa","So"].forEach(function(w){
-    cal.appendChild(h("div",{class:"cal-h",text:w}));
+  MONTHS.forEach(function(mo){
+    var wrap=h("div",{class:"month"});
+    var head=h("div",{class:"month-head"},
+      h("b",{text:MONL[mo.m]+" "+mo.y}),
+      h("div",{class:"mini"},
+        h("button",{text:"alles grün",onclick:function(){
+          for(var o=mo.fromOff;o<=mo.toOff;o++) ui.busy.delete(o);
+          render();
+        }}),
+        h("button",{text:"alles rot",onclick:function(){
+          for(var o=mo.fromOff;o<=mo.toOff;o++) ui.busy.add(o);
+          render();
+        }})));
+    wrap.appendChild(head);
+
+    var cal=h("div",{class:"cal",role:"group","aria-label":"Kalender "+MONL[mo.m]+" "+mo.y});
+    ["Mo","Di","Mi","Do","Fr","Sa","So"].forEach(function(w){
+      cal.appendChild(h("div",{class:"cal-h",text:w}));
+    });
+    var firstDow=(dateOf(mo.fromOff).getDay()+6)%7;
+    for(var b=0;b<firstDow;b++) cal.appendChild(h("div",{class:"day blank"}));
+    for(var o=mo.fromOff;o<=mo.toOff;o++){
+      (function(o){
+        var busy=ui.busy.has(o);
+        var dt=dateOf(o);
+        cal.appendChild(h("button",{
+          class:"day"+(busy?" busy":""),
+          "aria-pressed":busy?"true":"false",
+          "aria-label":dt.getDate()+". "+MONL[dt.getMonth()]+", "+(busy?"keine Zeit":"Zeit"),
+          onclick:function(){ if(ui.busy.has(o))ui.busy.delete(o);else ui.busy.add(o); render(); }
+        },String(dt.getDate())));
+      })(o);
+    }
+    wrap.appendChild(cal);
+    card.appendChild(wrap);
   });
-  var firstDow=(new Date(YEAR,MONTH,1).getDay()+6)%7;
-  for(var b=0;b<firstDow;b++) cal.appendChild(h("div",{class:"day blank"}));
-  for(var d=1;d<=DAYS;d++){
-    (function(d){
-      var busy=ui.busy.has(d);
-      cal.appendChild(h("button",{
-        class:"day"+(busy?" busy":""),
-        "aria-pressed":busy?"true":"false",
-        "aria-label":d+". September, "+(busy?"keine Zeit":"Zeit"),
-        onclick:function(){ if(ui.busy.has(d))ui.busy.delete(d);else ui.busy.add(d); render(); }
-      },String(d)));
-    })(d);
-  }
-  card.appendChild(cal);
 
   card.appendChild(h("div",{class:"quick"},
     h("button",{class:"btn btn-ghost",text:"Alles auf grün",onclick:function(){ui.busy=new Set();render();}}),
     h("button",{class:"btn btn-ghost",text:"Alles auf rot",onclick:function(){
-      ui.busy=new Set(); for(var i=1;i<=DAYS;i++)ui.busy.add(i); render();}})));
+      ui.busy=new Set(); for(var i=0;i<N;i++)ui.busy.add(i); render();}})));
 
   var saveBtn=h("button",{class:"btn btn-primary",text:ui.saving?"Wird gespeichert …":"Speichern",onclick:onSave});
   if(ui.saving) saveBtn.disabled=true;
   var cancel=h("button",{class:"btn btn-ghost",text:"Abbrechen",onclick:function(){
-    ui.view="list"; render();}});
+    ui.view="list"; render(); window.scrollTo(0,0);}});
   if(ui.saving) cancel.disabled=true;
   card.appendChild(h("div",{class:"btn-row"},cancel,saveBtn));
 
@@ -532,7 +589,7 @@ function renderEdit(app){
         }).then(function(){
           ui.saving=false; ui.view="list";
           ui.notice="Eintrag gelöscht.";
-          render();
+          render(); window.scrollTo(0,0);
         }).catch(function(){
           ui.saving=false;
           ui.nameError="Löschen hat nicht geklappt – bitte nochmal versuchen.";
@@ -547,17 +604,16 @@ function renderEdit(app){
 
 function onSave(){
   var name=ui.draftName.trim().slice(0,40);
-  if(!name){ ui.nameError="Bitte gib zuerst deinen Namen ein."; render(); return; }
+  if(!name){ ui.nameError="Bitte gib zuerst deinen Namen ein."; render(); window.scrollTo(0,0); return; }
   var taken=state.people.some(function(p){return p.name===name && p.name!==ui.editingName;});
   if(taken){
     ui.nameError="Diesen Namen gibt es schon. Wenn du das bist: geh zurück und tippe auf deinen Namen. Sonst nimm z. B. „"+name+" B.“";
-    render(); return;
+    render(); window.scrollTo(0,0); return;
   }
   var busy=Array.from(ui.busy).sort(function(a,b){return a-b;});
   ui.saving=true; render();
 
   var work=Promise.resolve();
-  /* Umbenannt? Alten Schlüssel entfernen */
   if(ui.editingName && ui.editingName!==name){
     work=dbDelete("/people/"+keyFor(ui.editingName)).catch(function(){});
   }
@@ -565,12 +621,12 @@ function onSave(){
     return dbPut("/people/"+keyFor(name),{name:name,busy:encodeDays(busy)});
   }).then(function(){
     myName=name;
-    try{ localStorage.setItem("tf-me",name); }catch(e){}
+    try{ localStorage.setItem(LS_ME,name); }catch(e){}
     return refresh();
   }).then(function(){
     ui.saving=false; ui.view="list";
     ui.notice="Gespeichert! Alle anderen sehen deine Auswahl automatisch – du musst nichts weiterleiten.";
-    render();
+    render(); window.scrollTo(0,0);
     setTimeout(function(){ if(ui.notice){ ui.notice=""; if(ui.view==="list") render(); } },6000);
   }).catch(function(){
     ui.saving=false;
